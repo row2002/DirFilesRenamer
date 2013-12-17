@@ -30,6 +30,13 @@ implementation
 
 {$R *.dfm}
 
+function StrCmpLogicalW(P1, P2: PWideChar): Integer;  stdcall; external 'Shlwapi.dll';
+
+function CompareStrings(List: TStringList; Index1, Index2: Integer): Integer;
+begin
+  Result := StrCmpLogicalW(PWideChar(WideString(List[Index1])), PWideChar(WideString(List[Index2])));
+end;
+
 procedure TMainForm.SelectDirBtnClick(Sender: TObject);
 var directory: string;
 begin
@@ -43,35 +50,41 @@ end;
 procedure TMainForm.GoBtnClick(Sender: TObject);
 var directory, prefix, newFileName: string;
     SR: TSearchRec;
-    i, filesCount: integer;
-    files: array of string;
+    SL: TStringList;
+    i: integer;
 begin
   directory := DirTF.Text + '\';
   prefix := PrefixTF.Text;
-  filesCount := 0;
 
   if (Length(directory) = 0) then begin
     ShowMessage('Выберите директорию!');
   end else if (Length(prefix) = 0) then begin
     ShowMessage('Укажите префикс для названия файлов!');
   end else begin
-    if FindFirst(directory + '*.*', faAnyFile, SR) = 0 then begin
-      repeat
-        if (SR.Attr <> faDirectory) then begin
+    SL := TStringList.Create;
+
+    try
+      if FindFirst(directory + '*.*', faAnyFile and not faDirectory and not faHidden, SR) = 0 then begin
+        repeat
           if (SR.Name <> '.') and (SR.Name <> '..') then begin
-            filesCount := filesCount + 1;
-            SetLength(files, filesCount);
-            files[filesCount-1] := SR.name;
+            SL.Add(SR.Name);
           end;
-        end;
-      until FindNext(SR) <> 0;
-      FindClose(SR);
+        until FindNext(SR) <> 0;
+        FindClose(SR);
+      end;
+
+      SL.CustomSort(CompareStrings);
+
+      for i:=0 to SL.Count-1 do begin
+        newFileName := directory + prefix + IntToStr(i+1) + ExtractFileExt(SL[i]);
+        RenameFile(directory + SL[i], newFileName);
+      end;
+
+    finally
+      SL.Clear;
+      SL.Free;
     end;
 
-   for i:=0 to filesCount-1 do begin
-      newFileName := directory + prefix + IntToStr(i+1) + ExtractFileExt(files[i]);
-      RenameFile(directory+files[i], newFileName);
-    end;
     ShowMessage('Переимнование завершено!');
   end;
 end;
